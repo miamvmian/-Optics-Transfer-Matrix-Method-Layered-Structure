@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree -a -L 3 /Users/luqian/ScientificAI/TransferMatrix)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
