@@ -1,50 +1,110 @@
-# Transfer Matrix Method for Wavelength Arrays
+# Transfer Matrix Method for Multi-Layer Optical Structures
 
-A Python implementation of the Transfer Matrix Method for calculating optical properties across multiple wavelengths. This package provides three main classes:
-
-1. **SingleInterfaceTMatrix**: For single interface calculations
-2. **LayerPropagationMatrix**: For phase accumulation through a single layer
-3. **WaveField**: For storing electromagnetic field data with forward and backward components
-
-All classes support efficient vectorized operations for wavelength arrays with fixed incident angles.
+A comprehensive Python implementation of the Transfer Matrix Method (TMM) for calculating optical properties (reflectance and transmittance) of multi-layer photonic structures. Supports both s-polarization (TE) and p-polarization (TM) at arbitrary incident angles across multiple wavelengths.
 
 ## Table of Contents
 
 - [Features](#features)
+- [Layered Model](#layered-model)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Physical Background](#physical-background)
 - [API Reference](#api-reference)
 - [Examples](#examples)
-- [Performance](#performance)
-- [Limitations](#limitations)
+- [Energy Conservation](#energy-conservation)
 - [References](#references)
 
 ## Features
 
 ✨ **Comprehensive Functionality**
 
-- Calculate transfer matrices for single interfaces at multiple wavelengths
-- Calculate propagation matrices for single layers at multiple wavelengths
-- Store and manipulate electromagnetic field data with WaveField dataclass
-- Support for both s-polarization (TE mode) and p-polarization (TM mode)
+- Calculate reflectance and transmittance for multi-layer structures
+- Support for 0 to N layers (including single interface)
+- Both s-polarization (TE) and p-polarization (TM)
+- Arbitrary incident angles (0° to 90°)
+- Wavelength array support for efficient sweeps
 - Handle complex permittivities (lossy materials)
-- Support complex wave vectors for advanced applications
-- Fixed incident angle with wavelength array support
+- Proper power flow correction for different incident/exit media
 
 🚀 **Performance & Stability**
 
 - Vectorized operations for efficient wavelength sweeps
-- Improved numerical stability with proper branch selection
-- Input validation with informative error messages
-- Broadcasting support for scalar inputs
+- Numerical stability using cos(θ) instead of kz/k0 ratios
+- Comprehensive input validation
+- Energy conservation verified (R + T = 1.0 for lossless materials)
 
 📚 **Well Documented**
 
 - Comprehensive docstrings following NumPy conventions
 - Type hints for better IDE support
-- Multiple usage examples
+- Multiple test examples
 - Clear error messages
+
+## Layered Model
+
+The multi-layer structure is defined as a stack of layers between two semi-infinite media:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Incident Medium (ε₁)                      │
+│                    (e.g., Air, n = 1.0)                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │         Layer 1 (ε₂, d₁)                            │   │
+│  │         (e.g., SiO₂, n = 1.45)                      │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │         Layer 2 (ε₃, d₂)                            │   │
+│  │         (e.g., Si, n = 3.5)                         │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │         Layer 3 (ε₄, d₃)                            │   │
+│  │         (e.g., SiO₂, n = 1.45)                      │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │         ...                                         │   │
+│  │         (more layers)                                │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │         Layer N (εₙ₊₁, dₙ)                          │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                               │
+├─────────────────────────────────────────────────────────────┤
+│                    Exit Medium (εₙ₊₂)                        │
+│                    (e.g., Glass, n = 1.5)                    │
+└─────────────────────────────────────────────────────────────┘
+
+Incident Wave (θ) →  →  →  →  →  →  →  →  →  →  →  →  →  →  →  Transmitted Wave
+                    ↓
+                Reflected Wave
+```
+
+### Structure Definition
+
+The structure is mathematically represented as:
+
+**Incident Medium (ε₁)** | **Layer 1 (ε₂, d₁)** | **Layer 2 (ε₃, d₂)** | ... | **Layer N (εₙ₊₁, dₙ)** | **Exit Medium (εₙ₊₂)**
+
+Where:
+- **εᵢ**: Permittivity of medium/layer i (ε = n² for non-magnetic materials)
+- **dᵢ**: Thickness of layer i (in meters)
+- **θ**: Incident angle (in degrees)
+- **λ**: Wavelength (in meters)
+
+### Special Cases
+
+1. **Zero Layers (Single Interface)**: 
+   ```
+   Incident Medium (ε₁) | Exit Medium (ε₂)
+   ```
+   This is a simple Fresnel interface.
+
+2. **One Layer**:
+   ```
+   Incident Medium (ε₁) | Layer (ε₂, d) | Exit Medium (ε₃)
+   ```
+
+3. **Multiple Layers**:
+   ```
+   Incident Medium | Layer 1 | Layer 2 | ... | Layer N | Exit Medium
+   ```
 
 ## Installation
 
@@ -68,425 +128,409 @@ Or simply copy `TMatrix.py` to your project directory.
 
 ## Quick Start
 
-### Basic Example: Single Interface
+### Basic Example: Single Interface (0 layers)
 
 ```python
 import numpy as np
-from TMatrix import SingleInterfaceTMatrix
+from TMatrix import MultiLayerStructure
 
 # Define wavelength array
-lda = np.array([500e-9, 600e-9, 700e-9])  # 3 wavelengths
-theta = 30.0  # 30 degrees incident angle
-eps_in = 1.0  # Air
-eps_out = 2.25  # Glass (constant)
+wavelengths = np.array([500e-9, 600e-9, 700e-9])  # 500, 600, 700 nm
+angle_degrees = 30.0  # 30 degrees incident angle
 
-# Create calculator for s-polarization
-tm = SingleInterfaceTMatrix(lda, theta, 's', eps_in, eps_out)
+# Create structure: Air | Glass (single interface)
+ml = MultiLayerStructure(
+    wavelengths=wavelengths,
+    angle_degrees=angle_degrees,
+    polarization='s',  # s-polarization (TE)
+    layers=[],  # Empty list = single interface
+    eps_incident=1.0,  # Air
+    eps_exit=2.25,  # Glass (n=1.5, so n²=2.25)
+)
 
-# Calculate transfer matrices
-T_matrices = tm.full_transfer_matrix()  # Shape (3, 2, 2)
+# Calculate reflectance and transmittance
+R = ml.reflectance()  # Shape: (3,)
+T = ml.transmittance()  # Shape: (3,)
 
-# Get wave vectors
-k_vectors = tm.k_vectors()
-
-print(f"Transfer matrix shape: {T_matrices.shape}")
-print(f"Wave vectors available: {list(k_vectors.keys())}")
+print(f"Reflectance: {R}")
+print(f"Transmittance: {T}")
+print(f"R + T = {R + T}")  # Should be ~1.0 for lossless materials
 ```
 
-### Basic Example: Layer Propagation
+### Basic Example: Single Layer
 
 ```python
 import numpy as np
-from TMatrix import LayerPropagationMatrix
+from TMatrix import Layer, MultiLayerStructure
 
 # Define wavelength array
-lda = np.array([500e-9, 600e-9, 700e-9])  # 3 wavelengths
-theta = 30.0  # 30 degrees incident angle
-d = 100e-9  # 100 nm layer thickness
-eps = 2.25  # Glass (constant)
+wavelengths = np.linspace(400e-9, 800e-9, 100)  # 400-800 nm, 100 points
+angle_degrees = 45.0  # 45 degrees
 
-# Create calculator
-pm = LayerPropagationMatrix(lda, theta, d, eps)
+# Create a single layer: Air | SiO₂ (100 nm) | Glass
+layer = Layer(
+    thickness=100e-9,  # 100 nm
+    optical_property={"type": "permittivity", "value": 2.13}  # SiO₂ (n≈1.46)
+)
 
-# Calculate propagation matrices
-P_matrices = pm.propagation_matrix()  # Shape (3, 2, 2)
+ml = MultiLayerStructure(
+    wavelengths=wavelengths,
+    angle_degrees=angle_degrees,
+    polarization='p',  # p-polarization (TM)
+    layers=[layer],
+    eps_incident=1.0,  # Air
+    eps_exit=2.25,  # Glass
+)
 
-# Get wave vectors
-k_vectors = pm.k_vectors()
+# Calculate optical properties
+R = ml.reflectance()
+T = ml.transmittance()
 
-print(f"Propagation matrix shape: {P_matrices.shape}")
-print(f"Wave vectors available: {list(k_vectors.keys())}")
-```
-
-### Basic Example: WaveField
-
-```python
-import numpy as np
-from TMatrix import WaveField
-
-# Define wave vectors (can be real or complex)
-k_vectors = np.array([1.0e7, 1.2e7, 1.4e7])  # Wave vectors can be real or complex
-forward_amp = np.array([1.0+0j, 0.9+0.1j, 0.8+0.2j])
-backward_amp = np.array([0.1+0j, 0.15+0.05j, 0.2+0.1j])
-field_data = np.column_stack([forward_amp, backward_amp])
-
-# Create WaveField
-wave_field = WaveField(k_vectors, field_data)
-
-# Access components
-print(f"Number of points: {wave_field.n_points}")
-print(f"Forward component: {wave_field.forward}")
-print(f"Backward component: {wave_field.backward}")
-print(f"Field shape: {wave_field.field.shape}")
-```
-
-### Wavelength Sweeping
-
-```python
-# Define wavelength range
-wavelengths = np.linspace(400e-9, 800e-9, 1000)  # 400-800 nm
-
-# Define interface: air to glass
-eps_in = 1.0  # Air (constant)
-eps_out = 2.25  # Glass (constant)
-theta = 45.0  # 45 degrees
-
-# Calculate for s-polarization
-tm_s = SingleInterfaceTMatrix(wavelengths, theta, 's', eps_in, eps_out)
-T_s = tm_s.full_transfer_matrix()
-
-# Calculate for p-polarization
-tm_p = SingleInterfaceTMatrix(wavelengths, theta, 'p', eps_in, eps_out)
-T_p = tm_p.full_transfer_matrix()
-
-# Calculate propagation through glass layer
-d = 200e-9  # 200 nm layer
-pm = LayerPropagationMatrix(wavelengths, theta, d, eps_out)
-P = pm.propagation_matrix()
-
-# Plot transfer matrix elements
+# Plot results
 import matplotlib.pyplot as plt
-plt.figure(figsize=(12, 8))
-
-plt.subplot(2, 2, 1)
-plt.plot(wavelengths * 1e9, np.real(T_s[:, 0, 0]))
-plt.title('T_s[0,0] (real)')
+plt.figure(figsize=(10, 5))
+plt.plot(wavelengths * 1e9, R, label='Reflectance')
+plt.plot(wavelengths * 1e9, T, label='Transmittance')
+plt.plot(wavelengths * 1e9, R + T, '--', label='R + T')
 plt.xlabel('Wavelength (nm)')
-
-plt.subplot(2, 2, 2)
-plt.plot(wavelengths * 1e9, np.imag(T_s[:, 0, 0]))
-plt.title('T_s[0,0] (imag)')
-plt.xlabel('Wavelength (nm)')
-
-plt.subplot(2, 2, 3)
-plt.plot(wavelengths * 1e9, np.real(P[:, 0, 0]))
-plt.title('P[0,0] (real)')
-plt.xlabel('Wavelength (nm)')
-
-plt.subplot(2, 2, 4)
-plt.plot(wavelengths * 1e9, np.imag(P[:, 0, 0]))
-plt.title('P[0,0] (imag)')
-plt.xlabel('Wavelength (nm)')
-
-plt.tight_layout()
+plt.ylabel('Reflectance / Transmittance')
+plt.title('Single Layer: Air | SiO₂ (100 nm) | Glass')
+plt.legend()
+plt.grid(True)
 plt.show()
 ```
 
-### Complex Permittivity Example
+### Basic Example: Multi-Layer Structure
 
 ```python
-# Interface with lossy material
+import numpy as np
+from TMatrix import Layer, MultiLayerStructure
+
+# Create a Bragg grating: alternating high/low index layers
 wavelengths = np.linspace(500e-9, 700e-9, 200)
-theta = 60.0  # 60 degrees
+angle_degrees = 0.0  # Normal incidence
 
-# Air to gold (complex permittivity)
-eps_in = 1.0  # Air
-eps_out = -25 + 1.5j  # Gold (approximate)
+layers = []
+for i in range(5):  # 5 periods
+    # High index layer (Si, n=3.5)
+    layers.append(Layer(
+        thickness=50e-9,
+        optical_property={"type": "refractive_index", "value": 3.5}
+    ))
+    # Low index layer (SiO₂, n=1.46)
+    layers.append(Layer(
+        thickness=120e-9,
+        optical_property={"type": "refractive_index", "value": 1.46}
+    ))
 
-tm = SingleInterfaceTMatrix(wavelengths, theta, 'p', eps_in, eps_out)
-T_matrices = tm.full_transfer_matrix()
+ml = MultiLayerStructure(
+    wavelengths=wavelengths,
+    angle_degrees=angle_degrees,
+    polarization='s',
+    layers=layers,
+    eps_incident=1.0,  # Air
+    eps_exit=1.0,  # Air
+)
 
-# Get wave vectors
-k_vectors = tm.k_vectors()
-kz_out = k_vectors['kz_out']
+R = ml.reflectance()
+T = ml.transmittance()
 
-print(f"kz_out shape: {kz_out.shape}")
-print(f"kz_out[0]: {kz_out[0]:.6f} (complex)")
+# Energy conservation check
+print(f"Max |R + T - 1|: {np.max(np.abs(R + T - 1.0)):.2e}")
 ```
 
 ## Physical Background
 
 ### Transfer Matrix Method
 
-The Transfer Matrix Method for optical structures relates electromagnetic fields across interfaces and through layers. For each wavelength, we define:
+The Transfer Matrix Method relates electromagnetic field amplitudes across interfaces and through layers. For a multi-layer structure, the total transfer matrix is constructed by multiplying interface and propagation matrices:
 
-1. **Field Matrix (F)**: Relates forward and backward propagating waves to field components
-2. **Propagation Matrix (P)**: Accounts for phase accumulation through a layer
-3. **Transfer Matrix (T)**: Combines field matrices for interfaces
+**T_total = F_out_inv @ F_N @ P_N @ F_N_inv @ ... @ F_1 @ P_1 @ F_1_inv @ F_in**
 
-### Single Interface
-The transfer matrix for a single interface is:
+Where:
+- **F_in**: Forward matrix for incident medium
+- **F_i_inv**: Inverse matrix for layer i (interface from previous medium to layer i)
+- **P_i**: Propagation matrix through layer i
+- **F_i**: Forward matrix for layer i (interface from layer i to next medium)
+- **F_out_inv**: Inverse matrix for exit medium
+
+### Matrix Structure
+
+**Interface Matrix (F)**:
+- **s-polarization**: F = [[1, 1], [-a, a]] where a = √ε·cos(θ) = kz/k₀
+- **p-polarization**: F = [[b, -b], [1, 1]] where b = cos(θ)/√ε = kz/(k₀·ε)
+
+**Propagation Matrix (P)**:
 ```
-T = F_out * F_in^{-1}
+P = [[exp(i·kz·d), 0], [0, exp(-i·kz·d)]]
 ```
 
-### Layer Propagation
-The propagation matrix for a layer is:
+### Reflectance and Transmittance
+
+**Reflectance**:
 ```
-P = [[exp(i*kz*d), 0], [0, exp(-i*kz*d)]]
+R = |r|², where r = -T₂₁ / T₂₂
 ```
 
-### Full Single Layer (Manual Combination)
-Users can combine interface and propagation matrices:
-```
-T_full = F_out @ P @ F_in^{-1}
-```
+**Transmittance**:
+- **Zero layers (single interface)**: Full power flow correction applied
+- **One or more layers**: Simplified formula (power flow handled by matrix construction)
+
+### Wave Vector Components
+
+- **k₀ = 2π/λ**: Free-space wave number
+- **kx = k₀·√ε·sin(θ)**: Tangential component (conserved across interfaces via Snell's law)
+- **kz = √(k₀²·ε - kx²)**: Normal component (varies with permittivity)
 
 ### Polarization Modes
 
 - **s-polarization (TE)**: Electric field perpendicular to plane of incidence
 - **p-polarization (TM)**: Magnetic field perpendicular to plane of incidence
 
-### Key Equations
-
-**Wave Vectors:**
-
-- `k0 = 2π/λ` (free space wave vector)
-- `kx = k0 * sqrt(eps) * sin(θ)` (tangential component)
-- `kz = sqrt(k0² * eps - kx²)` (normal component)
-
-**Field Matrices:**
-
-- **s-polarization**: F = [[1, 1], [-kz/k0, kz/k0]]
-- **p-polarization**: F = [[kz/(k0*eps), -kz/(k0*eps)], [1, 1]]
-
 ## API Reference
 
-### SingleInterfaceTMatrix Class
+### MultiLayerStructure Class
 
 ```python
-SingleInterfaceTMatrix(lda, theta, polarization, eps_in, eps_out)
+MultiLayerStructure(
+    wavelengths: float | np.ndarray,
+    angle_degrees: float,
+    polarization: str,
+    layers: list[Layer],
+    eps_incident: float | complex | np.ndarray,
+    eps_exit: float | complex | np.ndarray,
+)
 ```
 
 **Parameters:**
 
-- `lda` (float or array): Wavelength(s) in meters
-- `theta` (float): Incident angle in degrees (single value)
+- `wavelengths` (float or array): Wavelength(s) in meters
+- `angle_degrees` (float): Incident angle in degrees, range [0, 90)
 - `polarization` (str): 's' for TE, 'p' for TM
-- `eps_in` (float or array): Input medium permittivity
-- `eps_out` (float or array): Output medium permittivity
-
-**Attributes:**
-
-- `lda`: Wavelength array in meters, shape (N,)
-- `theta`: Incident angle in radians
-- `polarization`: Polarization mode
-- `eps_in`: Input medium permittivity, shape (N,)
-- `eps_out`: Output medium permittivity, shape (N,)
-- `k0`: Free space wave vectors, shape (N,)
-- `kx`: Tangential wave vectors, shape (N,)
-- `kz_in`: Input medium z-components, shape (N,)
-- `kz_out`: Output medium z-components, shape (N,)
+- `layers` (list[Layer]): List of Layer objects, ordered from incident to exit
+- `eps_incident` (float or array): Permittivity of incident medium
+- `eps_exit` (float or array): Permittivity of exit medium
 
 **Methods:**
 
-- `full_transfer_matrix()`: Calculate transfer matrices, shape (N, 2, 2)
-- `k_vectors()`: Get all calculated wave vectors
-- `__repr__()`: String representation
+- `total_transfer_matrix()`: Calculate total transfer matrix, shape (n_wavelengths, 2, 2)
+- `reflectance()`: Calculate reflectance R = |r|², shape (n_wavelengths,)
+- `transmittance()`: Calculate transmittance with power flow correction, shape (n_wavelengths,)
+- `wave_vectors()`: Get all wave vector components (k0, kx, kz_incident, kz_exit, kz_layers)
 
-### LayerPropagationMatrix Class
+### Layer Class
 
 ```python
-LayerPropagationMatrix(lda, theta, d, eps)
+Layer(
+    thickness: float,
+    optical_property: dict,
+)
 ```
 
 **Parameters:**
 
-- `lda` (float or array): Wavelength(s) in meters
-- `theta` (float): Incident angle in degrees (single value)
-- `d` (float): Layer thickness in meters (scalar)
-- `eps` (float or array): Layer permittivity
+- `thickness` (float): Layer thickness in meters (must be >= 0)
+- `optical_property` (dict): Dictionary with keys:
+  - `'type'`: Either `'permittivity'` or `'refractive_index'`
+  - `'value'`: The permittivity or refractive index value
 
-**Attributes:**
-
-- `lda`: Wavelength array in meters, shape (N,)
-- `theta`: Incident angle in radians
-- `d`: Layer thickness in meters
-- `eps`: Layer permittivity, shape (N,)
-- `k0`: Free space wave vectors, shape (N,)
-- `kx`: Tangential wave vectors, shape (N,)
-- `kz`: z-component wave vectors, shape (N,)
-
-**Methods:**
-
-- `propagation_matrix()`: Calculate propagation matrices, shape (N, 2, 2)
-- `k_vectors()`: Get all calculated wave vectors
-- `__repr__()`: String representation
-
-### WaveField Class
+**Example:**
 
 ```python
-WaveField(k_vectors, field)
+# Using permittivity
+layer1 = Layer(
+    thickness=100e-9,
+    optical_property={"type": "permittivity", "value": 2.25}
+)
+
+# Using refractive index (automatically converted to permittivity: ε = n²)
+layer2 = Layer(
+    thickness=200e-9,
+    optical_property={"type": "refractive_index", "value": 1.5}
+)
 ```
-
-**Parameters:**
-
-- `k_vectors` (array): Wave vector array, shape (N,) - can be real or complex
-- `field` (array): Complex field array, shape (N, 2)
-
-**Attributes:**
-
-- `k_vectors`: Wave vector array, shape (N,)
-- `field`: Complex field array, shape (N, 2)
-
-**Properties:**
-
-- `forward`: Forward propagating component, shape (N,)
-- `backward`: Backward propagating component, shape (N,)
-- `n_points`: Number of wave vector points
-
-**Features:**
-
-- Supports complex wave vectors for advanced applications
-- Automatic validation and type conversion
-- Physics-oriented naming (forward/backward components)
-- Independent data structure for manual population
 
 ## Examples
 
-### Example 1: Fresnel Interface
+### Example 1: Air-Silicon-Silicon Dioxide Structure
 
 ```python
-# Air-glass interface at normal incidence
-lda = np.array([400e-9, 500e-9, 600e-9, 700e-9])
-theta = 0.0  # Normal incidence
-eps_in = 1.0  # Air
-eps_out = 2.25  # Glass (n=1.5)
+import numpy as np
+from TMatrix import Layer, MultiLayerStructure
 
-tm = SingleInterfaceTMatrix(lda, theta, 's', eps_in, eps_out)
-T = tm.full_transfer_matrix()
+wavelengths = np.linspace(400e-9, 1000e-9, 300)
+angle_degrees = 0.0  # Normal incidence
 
-print("Transfer matrices shape:", T.shape)
-print("T[0] (first wavelength):")
-print(T[0])
-```
+# Structure: Air | Si (200 nm) | SiO₂ (500 nm) | Air
+layers = [
+    Layer(
+        thickness=200e-9,
+        optical_property={"type": "refractive_index", "value": 3.5}  # Si
+    ),
+    Layer(
+        thickness=500e-9,
+        optical_property={"type": "refractive_index", "value": 1.46}  # SiO₂
+    ),
+]
 
-### Example 2: Layer Propagation
+ml = MultiLayerStructure(
+    wavelengths=wavelengths,
+    angle_degrees=angle_degrees,
+    polarization='s',
+    layers=layers,
+    eps_incident=1.0,  # Air
+    eps_exit=1.0,  # Air
+)
 
-```python
-# Glass layer propagation
-lda = 633e-9  # He-Ne laser
-theta = 45.0  # 45 degrees
-d = 100e-9  # 100 nm layer
-eps = 2.25  # Glass
+R = ml.reflectance()
+T = ml.transmittance()
 
-pm = LayerPropagationMatrix(lda, theta, d, eps)
-P = pm.propagation_matrix()
-
-print("Propagation matrix:")
-print(P[0])
-```
-
-### Example 3: Manual Combination for Full Layer
-
-```python
-# Complete single layer: air | glass | air
-lda = np.array([500e-9, 600e-9, 700e-9])
-theta = 30.0
-d = 100e-9  # Layer thickness
-eps_in = 1.0  # Air
-eps_layer = 2.25  # Glass layer
-eps_out = 1.0  # Air
-
-# Calculate interface matrices
-tm_in = SingleInterfaceTMatrix(lda, theta, 's', eps_in, eps_layer)
-tm_out = SingleInterfaceTMatrix(lda, theta, 's', eps_layer, eps_out)
-
-# Calculate propagation matrix
-pm = LayerPropagationMatrix(lda, theta, d, eps_layer)
-
-# Get matrices
-F_in_inv = tm_in.full_transfer_matrix()
-P = pm.propagation_matrix()
-F_out = tm_out.full_transfer_matrix()
-
-# Combine manually: T_full = F_out @ P @ F_in_inv
-T_full = np.matmul(np.matmul(F_out, P), F_in_inv)
-
-print("Full layer transfer matrix shape:", T_full.shape)
-```
-
-### Example 4: Wavelength-Dependent Permittivity
-
-```python
-# Interface with wavelength-dependent permittivity
-wavelengths = np.linspace(400e-9, 800e-9, 100)
-theta = 30.0
-
-# Simple dispersion model for glass
-eps_in = 1.0  # Air (constant)
-eps_out = 2.25 + 0.01j * (wavelengths - 500e-9) / 100e-9  # Wavelength-dependent
-
-tm = SingleInterfaceTMatrix(wavelengths, theta, 's', eps_in, eps_out)
-T = tm.full_transfer_matrix()
-
-# Plot transfer matrix magnitude
-plt.plot(wavelengths * 1e9, np.abs(T[:, 0, 0]))
+# Plot
+import matplotlib.pyplot as plt
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(wavelengths * 1e9, R, label='R')
+plt.plot(wavelengths * 1e9, T, label='T')
 plt.xlabel('Wavelength (nm)')
-plt.ylabel('|T[0,0]|')
-plt.title('Transfer Matrix Element vs Wavelength')
+plt.ylabel('Reflectance / Transmittance')
+plt.legend()
+plt.grid(True)
+
+plt.subplot(1, 2, 2)
+plt.plot(wavelengths * 1e9, R + T, label='R + T')
+plt.axhline(y=1.0, color='r', linestyle='--', label='Energy Conservation')
+plt.xlabel('Wavelength (nm)')
+plt.ylabel('R + T')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
 plt.show()
 ```
 
-### Example 5: Brewster's Angle Analysis
+### Example 2: Oblique Incidence with Different Media
 
 ```python
-# Analyze Brewster's angle for air-glass interface
-lda = 633e-9
-theta = np.arctan(np.sqrt(2.25)) * 180 / np.pi  # Brewster's angle
-eps_in = 1.0
-eps_out = 2.25
+import numpy as np
+from TMatrix import MultiLayerStructure
 
-# s-polarization (should have reflection)
-tm_s = SingleInterfaceTMatrix(lda, theta, 's', eps_in, eps_out)
-T_s = tm_s.full_transfer_matrix()
+wavelengths = np.array([633e-9])  # He-Ne laser
+angles = np.linspace(0, 85, 100)  # 0 to 85 degrees
 
-# p-polarization (should have minimal reflection)
-tm_p = SingleInterfaceTMatrix(lda, theta, 'p', eps_in, eps_out)
-T_p = tm_p.full_transfer_matrix()
+R_s = []
+R_p = []
+T_s = []
+T_p = []
 
-print(f"Brewster's angle: {theta:.2f}°")
-print("s-polarization T[0,0]:", T_s[0, 0, 0])
-print("p-polarization T[0,0]:", T_p[0, 0, 0])
+for angle in angles:
+    # s-polarization
+    ml_s = MultiLayerStructure(
+        wavelengths=wavelengths,
+        angle_degrees=angle,
+        polarization='s',
+        layers=[],  # Single interface
+        eps_incident=1.0,  # Air
+        eps_exit=2.25,  # Glass
+    )
+    R_s.append(ml_s.reflectance()[0])
+    T_s.append(ml_s.transmittance()[0])
+    
+    # p-polarization
+    ml_p = MultiLayerStructure(
+        wavelengths=wavelengths,
+        angle_degrees=angle,
+        polarization='p',
+        layers=[],
+        eps_incident=1.0,
+        eps_exit=2.25,
+    )
+    R_p.append(ml_p.reflectance()[0])
+    T_p.append(ml_p.transmittance()[0])
+
+# Plot
+import matplotlib.pyplot as plt
+plt.figure(figsize=(10, 6))
+plt.plot(angles, R_s, label='R_s (TE)')
+plt.plot(angles, R_p, label='R_p (TM)')
+plt.plot(angles, T_s, '--', label='T_s (TE)')
+plt.plot(angles, T_p, '--', label='T_p (TM)')
+plt.xlabel('Incident Angle (degrees)')
+plt.ylabel('Reflectance / Transmittance')
+plt.title('Air-Glass Interface: Reflectance vs Angle')
+plt.legend()
+plt.grid(True)
+plt.show()
 ```
 
-### Example 6: WaveField with Complex Wave Vectors
+### Example 3: Wavelength-Dependent Permittivity
 
 ```python
-# Create WaveField with complex wave vectors (lossy medium)
 import numpy as np
-from TMatrix import WaveField
+from TMatrix import Layer, MultiLayerStructure
 
-# Complex wave vectors (e.g., in lossy medium)
-k_vectors = np.array([1.0e7 + 0.1e6j, 1.2e7 + 0.15e6j, 1.4e7 + 0.2e6j])
+wavelengths = np.linspace(400e-9, 800e-9, 200)
 
-# Field amplitudes (forward and backward components)
-forward_amp = np.array([1.0+0j, 0.9+0.1j, 0.8+0.2j])
-backward_amp = np.array([0.1+0j, 0.15+0.05j, 0.2+0.1j])
-field_data = np.column_stack([forward_amp, backward_amp])
+# Wavelength-dependent permittivity (simple dispersion model)
+def silicon_permittivity(lda):
+    """Simple dispersion model for silicon"""
+    n = 3.5 + 0.1 * (lda - 600e-9) / 100e-9
+    return n**2
 
-# Create WaveField
-wave_field = WaveField(k_vectors, field_data)
+eps_si = silicon_permittivity(wavelengths)
 
-# Access field components
-print(f"Number of points: {wave_field.n_points}")
-print(f"Forward component: {wave_field.forward}")
-print(f"Backward component: {wave_field.backward}")
-print(f"Field shape: {wave_field.field.shape}")
+# Create layer with wavelength-dependent permittivity
+layer = Layer(
+    thickness=100e-9,
+    optical_property={"type": "permittivity", "value": eps_si}
+)
 
-# Check if wave vectors are complex
-print(f"Wave vectors are complex: {np.iscomplexobj(wave_field.k_vectors)}")
-print(f"Field is complex: {np.iscomplexobj(wave_field.field)}")
+ml = MultiLayerStructure(
+    wavelengths=wavelengths,
+    angle_degrees=0.0,
+    polarization='s',
+    layers=[layer],
+    eps_incident=1.0,
+    eps_exit=1.0,
+)
+
+R = ml.reflectance()
+T = ml.transmittance()
+
+# Plot
+import matplotlib.pyplot as plt
+plt.figure(figsize=(10, 5))
+plt.plot(wavelengths * 1e9, R, label='Reflectance')
+plt.plot(wavelengths * 1e9, T, label='Transmittance')
+plt.xlabel('Wavelength (nm)')
+plt.ylabel('Reflectance / Transmittance')
+plt.title('Si Layer with Wavelength-Dependent Permittivity')
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+## Energy Conservation
+
+The implementation ensures energy conservation (R + T = 1.0) for lossless materials. This is verified through comprehensive tests:
+
+- ✅ Normal incidence with 0-10 layers
+- ✅ Oblique incidence with 0-10 layers
+- ✅ Both s and p polarizations
+- ✅ Same and different incident/exit media
+- ✅ Multiple wavelengths
+
+To verify energy conservation in your calculations:
+
+```python
+R = ml.reflectance()
+T = ml.transmittance()
+R_plus_T = R + T
+
+# Check energy conservation
+max_deviation = np.max(np.abs(R_plus_T - 1.0))
+print(f"Max |R + T - 1|: {max_deviation:.2e}")
+
+# Should be very close to zero for lossless materials
+assert np.allclose(R_plus_T, 1.0, atol=1e-10)
 ```
 
 ## Performance
@@ -497,51 +541,42 @@ print(f"Field is complex: {np.iscomplexobj(wave_field.field)}")
    ```python
    # Good: Single call with array
    wavelengths = np.linspace(400e-9, 800e-9, 1000)
-   tm = SingleInterfaceTMatrix(wavelengths, theta, 's', eps_in, eps_out)
+   ml = MultiLayerStructure(wavelengths, angle, pol, layers, eps_in, eps_out)
    
    # Less efficient: Loop
    for lda in wavelengths:
-       tm = SingleInterfaceTMatrix(lda, theta, 's', eps_in, eps_out)
+       ml = MultiLayerStructure(lda, angle, pol, layers, eps_in, eps_out)
    ```
 
 2. **Use broadcasting**: Scalar inputs are automatically broadcast
    ```python
-   # eps_in is scalar, automatically broadcast to match wavelengths
-   tm = SingleInterfaceTMatrix(wavelengths, theta, 's', 1.0, eps_out)
+   # eps_incident is scalar, automatically broadcast to match wavelengths
+   ml = MultiLayerStructure(wavelengths, angle, pol, layers, 1.0, eps_out)
    ```
-
-3. **Memory considerations**: For very large wavelength arrays, consider chunking
 
 ### Benchmarks
 
 Typical performance on modern hardware:
-
 - Single calculation: ~0.01 ms
-- 1000 wavelengths: ~1 ms (vectorized)
+- 1000 wavelengths: ~1-2 ms (vectorized)
 - Complex permittivities: ~2x slower than real
 
 ## Limitations
 
-1. **Single Interface/Layer Only**: Designed for one interface or one layer, not multi-layer structures
-2. **Fixed Angle**: Incident angle must be scalar, not array
-3. **Linear Media**: No nonlinear optical effects
-4. **Planar Interface**: Assumes infinite planar interface
-5. **Numerical Precision**: Very large or very small wavelengths may cause issues
-6. **Grazing Angles**: Accuracy may degrade near 90° incidence
+1. **Planar Interfaces**: Assumes infinite planar interfaces
+2. **Linear Media**: No nonlinear optical effects
+3. **Numerical Precision**: Very large or very small wavelengths may cause issues
+4. **Grazing Angles**: Accuracy may degrade near 90° incidence
+5. **Lossy Materials**: Complex permittivities supported, but energy conservation only holds for lossless materials
 
 ## Best Practices
 
 1. **Use appropriate units**: All lengths in meters, angles in degrees
-
 2. **Handle complex permittivities**: Use `eps = n_real**2 + 1j*n_imag` format
-
 3. **Validate inputs**: The code includes comprehensive validation
-
 4. **Start simple**: Test with known cases (Fresnel equations, etc.)
-
-5. **Check wave vectors**: Use `k_vectors()` to verify calculations
-
-6. **Combine manually**: For full layer calculations, combine interface and propagation matrices manually
+5. **Check energy conservation**: Verify R + T = 1.0 for lossless materials
+6. **Use refractive_index for clarity**: More intuitive than permittivity
 
 ## Error Handling
 
@@ -550,22 +585,37 @@ The implementation includes comprehensive error checking:
 ```python
 # Raises ValueError if inputs are invalid
 try:
-    tm = SingleInterfaceTMatrix(-1e-6, 0, 's', 1, 2.25)  # Negative wavelength
+    ml = MultiLayerStructure(
+        wavelengths=-1e-6,  # Negative wavelength
+        angle_degrees=0,
+        polarization='s',
+        layers=[],
+        eps_incident=1.0,
+        eps_exit=2.25,
+    )
 except ValueError as e:
     print(f"Error: {e}")
 
 # Warns if angles are out of physical range
-tm = SingleInterfaceTMatrix(1e-6, 95, 's', 1, 2.25)  # Warning issued
+ml = MultiLayerStructure(
+    wavelengths=1e-6,
+    angle_degrees=95,  # Warning issued
+    polarization='s',
+    layers=[],
+    eps_incident=1.0,
+    eps_exit=2.25,
+)
 
 # Raises error for exactly 90° (grazing incidence)
 try:
-    tm = SingleInterfaceTMatrix(1e-6, 90, 's', 1, 2.25)
-except ValueError as e:
-    print(f"Error: {e}")
-
-# Layer thickness validation
-try:
-    pm = LayerPropagationMatrix(1e-6, 0, -100e-9, 2.25)  # Negative thickness
+    ml = MultiLayerStructure(
+        wavelengths=1e-6,
+        angle_degrees=90,  # Error
+        polarization='s',
+        layers=[],
+        eps_incident=1.0,
+        eps_exit=2.25,
+    )
 except ValueError as e:
     print(f"Error: {e}")
 ```
@@ -588,7 +638,7 @@ Contributions are welcome! Please ensure:
 - Code follows PEP 8 style guidelines
 - All functions have comprehensive docstrings
 - Type hints are included
-- Tests pass (if applicable)
+- Tests pass (run `test_*.py` files)
 
 ## Contact
 
@@ -596,6 +646,6 @@ For questions, issues, or suggestions, please open an issue on GitHub.
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: October 2025  
+**Version**: 2.0  
+**Last Updated**: 2025  
 **Python Compatibility**: 3.7+
