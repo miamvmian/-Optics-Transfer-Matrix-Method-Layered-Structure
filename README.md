@@ -34,7 +34,7 @@ A comprehensive Python implementation of the Transfer Matrix Method (TMM) for ca
 - Numerical stability using cos(θ) instead of kz/k0 ratios
 - Comprehensive input validation
 - **Energy conservation verified**: R + T = 1.0 for lossless materials across all test cases
-- **Comprehensive test suite**: 100+ test cases covering constant and wavelength-dependent permittivities
+- **Comprehensive test suite**: 200+ test cases organized into focused test modules covering all scenarios
 
 📚 **Well Documented**
 
@@ -532,7 +532,60 @@ plt.grid(True)
 plt.show()
 ```
 
-### Example 4: Mixed Constant and Wavelength-Dependent Permittivity
+### Example 4: Single Interface (Zero Layers) with Wavelength-Dependent Permittivity
+
+```python
+import numpy as np
+from TMatrix import MultiLayerStructure
+
+wavelengths = np.array([400e-9, 500e-9, 600e-9, 700e-9, 800e-9])
+
+# Wavelength-dependent permittivity for glass (dispersion model)
+eps_air = np.ones(len(wavelengths))  # Air (constant, but as array)
+eps_glass = 2.25 + 0.01 * (wavelengths * 1e9 - 600) / 600  # Glass with dispersion
+
+# Single interface (zero layers) with wavelength-dependent permittivity
+ml = MultiLayerStructure(
+    wavelengths=wavelengths,
+    angle_degrees=45.0,  # Oblique incidence
+    polarization='s',
+    layers=[],  # Empty list = single interface
+    eps_incident=eps_air,    # Wavelength-dependent (array)
+    eps_exit=eps_glass,      # Wavelength-dependent (array)
+)
+
+R = ml.reflectance()
+T = ml.transmittance()
+
+# Verify energy conservation for all wavelengths
+R_plus_T = R + T
+print(f"Energy conservation check:")
+print(f"  R + T = {R_plus_T}")
+print(f"  Max deviation from 1.0: {np.max(np.abs(R_plus_T - 1.0)):.2e}")
+
+# Test different configurations
+configs = [
+    ("Both wavelength-dependent", eps_air, eps_glass),
+    ("Incident wavelength-dependent, exit constant", eps_air, 2.25),
+    ("Incident constant, exit wavelength-dependent", 1.0, eps_glass),
+]
+
+for name, eps_in, eps_out in configs:
+    ml = MultiLayerStructure(
+        wavelengths=wavelengths,
+        angle_degrees=30.0,
+        polarization='p',
+        layers=[],
+        eps_incident=eps_in,
+        eps_exit=eps_out,
+    )
+    R = ml.reflectance()
+    T = ml.transmittance()
+    max_dev = np.max(np.abs(R + T - 1.0))
+    print(f"{name}: Max deviation = {max_dev:.2e}")
+```
+
+### Example 5: Mixed Constant and Wavelength-Dependent Permittivity
 
 ```python
 import numpy as np
@@ -576,7 +629,7 @@ print(f"  R + T = {R_plus_T}")
 print(f"  Max deviation from 1.0: {np.max(np.abs(R_plus_T - 1.0)):.2e}")
 ```
 
-### Example 5: Comprehensive Wavelength-Dependent Structure
+### Example 6: Comprehensive Wavelength-Dependent Structure
 
 ```python
 import numpy as np
@@ -626,31 +679,59 @@ assert np.allclose(R + T, 1.0, atol=1e-10), "Energy conservation violated!"
 The implementation ensures energy conservation (R + T = 1.0) for lossless materials. This is verified through comprehensive tests:
 
 - ✅ Normal incidence with 0-10 layers
-- ✅ Oblique incidence with 0-10 layers (0° to 85°)
+- ✅ Oblique incidence with 0-10 layers (0° to 89°)
 - ✅ Both s and p polarizations
 - ✅ Same and different incident/exit media
 - ✅ Multiple wavelengths
-- ✅ **Constant permittivity (scalar values)**
-- ✅ **Wavelength-dependent permittivity (arrays)**
-- ✅ **Mixed cases (constant + wavelength-dependent)**
-- ✅ **Multiple layers with different permittivity types**
-- ✅ **Refractive index type (both constant and wavelength-dependent)**
+- ✅ Constant permittivity (scalar values)
+- ✅ Wavelength-dependent permittivity (arrays)
+- ✅ Mixed cases (constant + wavelength-dependent)
+- ✅ Zero layers (single interface) with wavelength-dependent permittivity
+- ✅ Multiple layers with different permittivity types
+- ✅ Refractive index type (both constant and wavelength-dependent)
+- ✅ Very high angles (up to 89°)
+- ✅ Multiple material combinations
+- ✅ Layer thickness variations
 
 ### Test Coverage
 
-The codebase includes comprehensive test suites (`test_*.py`) that verify energy conservation:
+The codebase includes comprehensive test suites (`test_*.py`) that verify energy conservation. The tests are organized into focused modules:
 
-- **test_wavelength_dependent_permittivity.py**: 100+ test cases covering constant and wavelength-dependent permittivities
-- **test_both_polarizations.py**: Tests for both s and p polarizations with various configurations
-- **test_energy_conservation.py**: Comprehensive energy conservation tests
-- **test_normal_incidence_energy.py**: Normal incidence tests
-- **test_oblique_interface_energy.py**: Oblique incidence interface tests
+**Core Test Files:**
+- **test_common_setup.py**: Shared constants and material definitions for all tests
+- **test_constant_permittivity.py**: Constant permittivity (scalar values) tests
+- **test_wavelength_dependent_permittivity_basic.py**: Basic wavelength-dependent permittivity (arrays) tests
+- **test_mixed_permittivity.py**: Mixed cases (constant + wavelength-dependent)
+- **test_multilayer_mixed_permittivity.py**: Multiple layers with mixed permittivity types
+- **test_zero_layer_wavelength_dependent.py**: Zero layers (single interface) with wavelength-dependent permittivity
+- **test_multilayer_wavelength_dependent.py**: Different numbers of layers (0-10) with wavelength-dependent permittivity
+- **test_oblique_wavelength_dependent.py**: Oblique incidence with wavelength-dependent permittivity
+- **test_multilayer_oblique_wavelength_dependent.py**: Multiple layers at different angles
+- **test_refractive_index.py**: Refractive index type (converted to permittivity)
+- **test_high_angles_materials.py**: Very high angles (up to 89°) with multiple material combinations
+- **test_layer_thickness_variations.py**: Layer thickness variations (50-500 nm)
+- **test_single_wavelength_focused.py**: Single wavelength focused tests with pattern analysis
+- **test_same_medium.py**: Same incident/exit medium comprehensive tests
+- **test_pattern_analysis.py**: Pattern analysis for different exit medium scenarios
+- **test_visualization.py**: Visualization plots (requires matplotlib)
 
-All tests pass with deviations < 1e-15 (numerical precision), confirming that energy conservation holds for:
-- Any number of layers (0 to 10+)
-- Any incident angle (0° to 85°)
-- Both constant and wavelength-dependent permittivities
-- Both s and p polarizations
+**Test Coverage Summary:**
+- ✅ Constant permittivity (scalar values)
+- ✅ Wavelength-dependent permittivity (arrays)
+- ✅ Mixed cases (constant + wavelength-dependent)
+- ✅ Zero layers (single interface) with wavelength-dependent permittivity
+- ✅ Multiple layers (0 to 10) with wavelength-dependent permittivity
+- ✅ Oblique incidence (0° to 89°)
+- ✅ Very high angles (up to 89°)
+- ✅ Multiple material combinations (Air, Glass, Silicon, Water, reverse directions)
+- ✅ Layer thickness variations
+- ✅ Single wavelength focused tests
+- ✅ Same incident/exit medium
+- ✅ Pattern analysis
+- ✅ Refractive index type (both constant and wavelength-dependent)
+- ✅ Visualization (optional, requires matplotlib)
+
+All tests pass with deviations < 1e-15 (numerical precision), confirming that energy conservation holds for all tested scenarios.
 
 To verify energy conservation in your calculations:
 
@@ -803,8 +884,9 @@ For questions, issues, or suggestions, please open an issue on GitHub.
 
 **v2.1** (2025)
 - Added comprehensive support for wavelength-dependent permittivity (arrays)
-- Enhanced energy conservation verification with 100+ test cases
+- Enhanced energy conservation verification with 200+ test cases organized into focused modules
 - Support for mixed constant and wavelength-dependent permittivities
+- Decomposed comprehensive test suite into focused, maintainable test files
 - Improved documentation and examples
 
 **v2.0** (2025)
