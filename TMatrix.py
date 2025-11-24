@@ -177,6 +177,8 @@ class Layer:
         Layer thickness in meters (must be >= 0)
     optical_property : dict
         Dictionary with 'type' ('permittivity' or 'refractive_index') and 'value'
+        The value can be a scalar (constant across wavelengths) or a 1D array
+        providing wavelength-dependent data.
     """
 
     thickness: float
@@ -200,19 +202,43 @@ class Layer:
                 f"optical_property['type'] must be 'permittivity' or 'refractive_index'"
             )
 
-        if not isinstance(value, (int, float, complex)):
-            raise ValueError("optical_property['value'] must be numeric")
+        # Convert value to numpy array for validation; allow scalars and 1D arrays
+        value_array = np.asarray(value, dtype=complex)
+        if value_array.ndim > 1:
+            raise ValueError("optical_property['value'] must be a scalar or 1D array")
+        if value_array.size == 0:
+            raise ValueError("optical_property['value'] must not be empty")
+        if np.any(np.real(value_array) <= 0):
+            raise ValueError(
+                f"{prop_type} must have positive real part, got {value_array}"
+            )
 
-        if np.real(value) <= 0:
-            raise ValueError(f"{prop_type} must have positive real part, got {value}")
+        # Store the normalized value back (scalar if 0-D, otherwise 1-D array)
+        if value_array.ndim == 0:
+            normalized_value = value_array.item()
+        else:
+            normalized_value = value_array
+        self.optical_property["value"] = normalized_value
 
     @property
-    def permittivity(self) -> complex:
-        """Get permittivity (converted from refractive index if needed)."""
-        value = complex(self.optical_property["value"])
+    def permittivity(self) -> complex | np.ndarray:
+        """
+        Get permittivity (converted from refractive index if needed).
+
+        Returns
+        -------
+        complex | np.ndarray
+            Scalar value for constant permittivity or 1D array for
+            wavelength-dependent permittivity.
+        """
+        value = np.asarray(self.optical_property["value"], dtype=complex)
         if self.optical_property["type"] == "permittivity":
-            return value
-        return value * value  # ε = n²
+            eps = value
+        else:
+            eps = value * value  # ε = n²
+        if eps.ndim == 0:
+            return eps.item()
+        return eps
 
 
 # ============================================================================
@@ -767,9 +793,48 @@ class MultiLayerStructure:
         self.n_layers = len(layers)
         self.eps_incident = np.broadcast_to(eps_incident, self.n_wavelengths)
         self.eps_exit = np.broadcast_to(eps_exit, self.n_wavelengths)
+        # Normalize layer permittivities (allow scalar or wavelength-dependent arrays)
+        self._layer_permittivities = [
+            self._normalize_permittivity(layer.permittivity, layer_index=i)
+            for i, layer in enumerate(self.layers)
+        ]
 
         self.k0 = 2 * np.pi / self.wavelengths
         self.kx = self.k0 * np.sqrt(self.eps_incident + 0j) * np.sin(self.angle_rad)
+
+    def _normalize_permittivity(
+        self, eps: complex | float | np.ndarray, layer_index: int | None = None
+    ) -> np.ndarray:
+        """
+        Normalize permittivity to array of shape (n_wavelengths,).
+
+        Parameters
+        ----------
+        eps : complex | float | np.ndarray
+            Permittivity value(s) to normalize.
+        layer_index : int | None, optional
+            Index of the layer for error reporting. If None, refers to media.
+
+        Returns
+        -------
+        np.ndarray
+            Array of permittivities for each wavelength.
+        """
+
+        eps_array = np.asarray(eps, dtype=complex)
+        if eps_array.ndim == 0:
+            return np.broadcast_to(eps_array, self.n_wavelengths)
+        if eps_array.ndim == 1:
+            if len(eps_array) != self.n_wavelengths:
+                prefix = f"Layer {layer_index} " if layer_index is not None else ""
+                raise ValueError(
+                    f"{prefix}permittivity array length ({len(eps_array)}) "
+                    f"must match number of wavelengths ({self.n_wavelengths})"
+                )
+            return eps_array
+        raise ValueError(
+            "Permittivity values must be scalar or 1D array matching wavelengths"
+        )
 
     def _calculate_layer_kz(self, eps: np.ndarray) -> np.ndarray:
         """
@@ -859,7 +924,7 @@ class MultiLayerStructure:
 
         return F_in, F_out_inv
 
-    def _create_propagation_matrix(self, layer: Layer) -> np.ndarray:
+    def _create_propagation_matrix(self, layer_index: int) -> np.ndarray:
         """
         Create propagation matrix for a layer.
 
@@ -872,8 +937,8 @@ class MultiLayerStructure:
 
         Parameters
         ----------
-        layer : Layer
-            Layer object containing thickness and permittivity
+        layer_index : int
+            Index of the layer whose propagation matrix is computed.
 
         Returns
         -------
@@ -882,13 +947,15 @@ class MultiLayerStructure:
             P[:, 0, 0] = exp(i*kz*d) for forward wave
             P[:, 1, 1] = exp(-i*kz*d) for backward wave
         """
-        kz = self._calculate_layer_kz(layer.permittivity)
+        eps = self._layer_permittivities[layer_index]
+        kz = self._calculate_layer_kz(eps)
         N = self.n_wavelengths
         P = np.zeros((N, 2, 2), dtype=complex)
         # Forward wave: accumulates phase +kz*d
-        P[:, 0, 0] = np.exp(1j * kz * layer.thickness)
+        thickness = self.layers[layer_index].thickness
+        P[:, 0, 0] = np.exp(1j * kz * thickness)
         # Backward wave: accumulates phase -kz*d
-        P[:, 1, 1] = np.exp(-1j * kz * layer.thickness)
+        P[:, 1, 1] = np.exp(-1j * kz * thickness)
         return P
 
     def total_transfer_matrix(self) -> np.ndarray:
@@ -935,9 +1002,8 @@ class MultiLayerStructure:
         # For N layers, we need N-1 inter-layer interfaces
         for i in range(self.n_layers - 1):
             # Matrix for layer i (forward direction)
-            F_i, F_i_inv = self._create_interface_half_matrices(
-                self.layers[i].permittivity
-            )
+            eps_layer = self._layer_permittivities[i]
+            F_i, F_i_inv = self._create_interface_half_matrices(eps_layer)
             inner_interface_matrices.append(F_i)
             inner_interface_matrices_inv.append(F_i_inv)
 
@@ -948,7 +1014,7 @@ class MultiLayerStructure:
 
         # Create propagation matrices for each layer
         propagation_matrices = [
-            self._create_propagation_matrix(layer) for layer in self.layers
+            self._create_propagation_matrix(idx) for idx in range(self.n_layers)
         ]
 
         # Multiply all matrices in the correct order to get total transfer matrix
@@ -982,7 +1048,8 @@ class MultiLayerStructure:
         kz_incident = self._calculate_layer_kz(self.eps_incident)
         kz_exit = self._calculate_layer_kz(self.eps_exit)
         kz_layers = [
-            self._calculate_layer_kz(layer.permittivity) for layer in self.layers
+            self._calculate_layer_kz(self._layer_permittivities[i])
+            for i in range(self.n_layers)
         ]
         return {
             "k0": self.k0,

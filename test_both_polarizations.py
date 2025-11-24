@@ -30,8 +30,8 @@ print(f"Exit medium: Glass (eps = {eps_glass})")
 print("\n" + "=" * 80)
 
 results_summary = {
-    's': {'passed': 0, 'failed': 0, 'cases': []},
-    'p': {'passed': 0, 'failed': 0, 'cases': []}
+    "s": {"passed": 0, "failed": 0, "cases": []},
+    "p": {"passed": 0, "failed": 0, "cases": []},
 }
 
 for n_layers in range(0, max_layers + 1):
@@ -40,47 +40,63 @@ for n_layers in range(0, max_layers + 1):
     for i in range(n_layers):
         thickness = 50e-9 + (i * 5e-9)
         if i % 2 == 0:
-            layers.append(Layer(thickness=thickness, optical_property={'type': 'permittivity', 'value': 2.13}))
+            layers.append(
+                Layer(
+                    thickness=thickness,
+                    optical_property={"type": "permittivity", "value": 2.13},
+                )
+            )
         else:
-            layers.append(Layer(thickness=thickness, optical_property={'type': 'permittivity', 'value': 5.76}))
-    
+            layers.append(
+                Layer(
+                    thickness=thickness,
+                    optical_property={"type": "permittivity", "value": 5.76},
+                )
+            )
+
     print(f"\n{n_layers} layer(s):")
     print("-" * 80)
-    print(f"{'Angle':<8} {'s-pol R+T':<18} {'s-pol Status':<15} {'p-pol R+T':<18} {'p-pol Status':<15}")
+    print(
+        f"{'Angle':<8} {'s-pol R+T':<18} {'s-pol Status':<15} {'p-pol R+T':<18} {'p-pol Status':<15}"
+    )
     print("-" * 80)
-    
+
     for angle in angles:
         row_results = {}
-        for pol in ['s', 'p']:
+        for pol in ["s", "p"]:
             ml = MultiLayerStructure(
                 wavelengths=wavelengths,
                 angle_degrees=angle,
                 polarization=pol,
                 layers=layers,
                 eps_incident=eps_air,
-                eps_exit=eps_glass
+                eps_exit=eps_glass,
             )
             R = ml.reflectance()[0]
             T = ml.transmittance()[0]
             R_plus_T = R + T
             max_dev = abs(R_plus_T - 1.0)
             passed = abs(R_plus_T - 1.0) < tolerance
-            
+
             row_results[pol] = (R, T, R_plus_T, max_dev, passed)
-            
+
             if passed:
-                results_summary[pol]['passed'] += 1
+                results_summary[pol]["passed"] += 1
             else:
-                results_summary[pol]['failed'] += 1
-                results_summary[pol]['cases'].append((n_layers, angle, R, T, R_plus_T, max_dev))
-        
-        s_r, s_t, s_r_plus_t, s_dev, s_passed = row_results['s']
-        p_r, p_t, p_r_plus_t, p_dev, p_passed = row_results['p']
-        
+                results_summary[pol]["failed"] += 1
+                results_summary[pol]["cases"].append(
+                    (n_layers, angle, R, T, R_plus_T, max_dev)
+                )
+
+        s_r, s_t, s_r_plus_t, s_dev, s_passed = row_results["s"]
+        p_r, p_t, p_r_plus_t, p_dev, p_passed = row_results["p"]
+
         s_status = "✓ PASS" if s_passed else f"✗ FAIL ({s_dev:.2e})"
         p_status = "✓ PASS" if p_passed else f"✗ FAIL ({p_dev:.2e})"
-        
-        print(f"{angle:>6.0f}°   {s_r_plus_t:<18.10f} {s_status:<15} {p_r_plus_t:<18.10f} {p_status:<15}")
+
+        print(
+            f"{angle:>6.0f}°   {s_r_plus_t:<18.10f} {s_status:<15} {p_r_plus_t:<18.10f} {p_status:<15}"
+        )
 
 print("\n" + "=" * 80)
 print("Summary by Polarization")
@@ -88,31 +104,37 @@ print("=" * 80)
 
 total_tests = (max_layers + 1) * len(angles)
 
-for pol in ['s', 'p']:
-    pol_name = "S-polarization (TE)" if pol == 's' else "P-polarization (TM)"
-    passed = results_summary[pol]['passed']
-    failed = results_summary[pol]['failed']
-    
+for pol in ["s", "p"]:
+    pol_name = "S-polarization (TE)" if pol == "s" else "P-polarization (TM)"
+    passed = results_summary[pol]["passed"]
+    failed = results_summary[pol]["failed"]
+
     print(f"\n{pol_name}:")
     print(f"  Total tests: {total_tests}")
     print(f"  Passed: {passed} ({100*passed/total_tests:.1f}%)")
     print(f"  Failed: {failed} ({100*failed/total_tests:.1f}%)")
-    
+
     if failed > 0:
         print(f"\n  Failing cases (first 10):")
-        print(f"  {'Layers':<8} {'Angle':<8} {'R':<15} {'T':<15} {'R+T':<15} {'Deviation':<15}")
+        print(
+            f"  {'Layers':<8} {'Angle':<8} {'R':<15} {'T':<15} {'R+T':<15} {'Deviation':<15}"
+        )
         print("  " + "-" * 80)
-        for i, (n_layers, angle, R, T, r_plus_t, dev) in enumerate(results_summary[pol]['cases'][:10]):
-            print(f"  {n_layers:<8} {angle:>6.0f}°   {R:<15.10f} {T:<15.10f} {r_plus_t:<15.10f} {dev:<15.2e}")
-        if len(results_summary[pol]['cases']) > 10:
+        for i, (n_layers, angle, R, T, r_plus_t, dev) in enumerate(
+            results_summary[pol]["cases"][:10]
+        ):
+            print(
+                f"  {n_layers:<8} {angle:>6.0f}°   {R:<15.10f} {T:<15.10f} {r_plus_t:<15.10f} {dev:<15.2e}"
+            )
+        if len(results_summary[pol]["cases"]) > 10:
             print(f"  ... and {len(results_summary[pol]['cases']) - 10} more cases")
 
 print("\n" + "=" * 80)
 print("Overall Summary")
 print("=" * 80)
 
-total_passed = results_summary['s']['passed'] + results_summary['p']['passed']
-total_failed = results_summary['s']['failed'] + results_summary['p']['failed']
+total_passed = results_summary["s"]["passed"] + results_summary["p"]["passed"]
+total_failed = results_summary["s"]["failed"] + results_summary["p"]["failed"]
 total_all = total_passed + total_failed
 
 print(f"\nTotal test cases: {total_all}")
@@ -123,6 +145,74 @@ if total_failed == 0:
     print("\n✓ ALL TESTS PASSED - Energy conservation holds for all cases!")
 else:
     print(f"\n✗ SOME TESTS FAILED - {total_failed} out of {total_all} tests failed")
+
+print("\n" + "=" * 80)
+
+# Test wavelength-dependent permittivity
+print("\n" + "=" * 80)
+print("Wavelength-Dependent Permittivity Test")
+print("=" * 80)
+
+wavelengths_array = np.array([400e-9, 500e-9, 600e-9, 700e-9, 800e-9])
+# Create wavelength-dependent permittivity using a simple dispersion model
+eps_air_array = np.ones(len(wavelengths_array))
+eps_glass_array = 2.25 + 0.01 * (wavelengths_array * 1e9 - 600) / 600
+eps_silica_array = 2.13 + 0.005 * (wavelengths_array * 1e9 - 600) / 600
+
+print(f"\nTesting with {len(wavelengths_array)} wavelengths")
+print(f"eps_glass varies from {eps_glass_array[0]:.4f} to {eps_glass_array[-1]:.4f}")
+
+test_cases_wd = [
+    (0, 0.0, "Normal, single interface, wavelength-dependent"),
+    (0, 30.0, "Oblique 30°, single interface, wavelength-dependent"),
+    (1, 0.0, "Normal, 1 layer with wavelength-dependent permittivity"),
+    (1, 30.0, "Oblique 30°, 1 layer with wavelength-dependent permittivity"),
+]
+
+for n_layers, angle, desc in test_cases_wd:
+    layers = []
+    for i in range(n_layers):
+        thickness = 50e-9 + (i * 5e-9)
+        if i % 2 == 0:
+            # Use wavelength-dependent permittivity for even layers
+            layers.append(
+                Layer(
+                    thickness=thickness,
+                    optical_property={
+                        "type": "permittivity",
+                        "value": eps_silica_array,
+                    },
+                )
+            )
+        else:
+            # Use constant permittivity for odd layers
+            layers.append(
+                Layer(
+                    thickness=thickness,
+                    optical_property={"type": "permittivity", "value": 5.76},
+                )
+            )
+
+    print(f"\n{desc}:")
+    for pol in ["s", "p"]:
+        ml = MultiLayerStructure(
+            wavelengths=wavelengths_array,
+            angle_degrees=angle,
+            polarization=pol,
+            layers=layers,
+            eps_incident=eps_air_array,  # Wavelength-dependent
+            eps_exit=eps_glass_array,  # Wavelength-dependent
+        )
+        R = ml.reflectance()
+        T = ml.transmittance()
+        R_plus_T = R + T
+        max_dev = np.max(np.abs(R_plus_T - 1.0))
+        passed = np.allclose(R_plus_T, 1.0, atol=tolerance)
+        status = "✓ PASS" if passed else "✗ FAIL"
+        print(
+            f"  {pol}-pol: R+T range = [{np.min(R_plus_T):.10f}, {np.max(R_plus_T):.10f}], "
+            f"max dev = {max_dev:.2e} {status}"
+        )
 
 print("\n" + "=" * 80)
 
@@ -144,19 +234,29 @@ for n_layers, angle, desc in test_cases:
     for i in range(n_layers):
         thickness = 50e-9 + (i * 5e-9)
         if i % 2 == 0:
-            layers.append(Layer(thickness=thickness, optical_property={'type': 'permittivity', 'value': 2.13}))
+            layers.append(
+                Layer(
+                    thickness=thickness,
+                    optical_property={"type": "permittivity", "value": 2.13},
+                )
+            )
         else:
-            layers.append(Layer(thickness=thickness, optical_property={'type': 'permittivity', 'value': 5.76}))
-    
+            layers.append(
+                Layer(
+                    thickness=thickness,
+                    optical_property={"type": "permittivity", "value": 5.76},
+                )
+            )
+
     print(f"\n{desc}:")
-    for pol in ['s', 'p']:
+    for pol in ["s", "p"]:
         ml = MultiLayerStructure(
             wavelengths=wavelengths,
             angle_degrees=angle,
             polarization=pol,
             layers=layers,
             eps_incident=eps_air,
-            eps_exit=eps_air
+            eps_exit=eps_air,
         )
         R = ml.reflectance()[0]
         T = ml.transmittance()[0]
@@ -166,4 +266,3 @@ for n_layers, angle, desc in test_cases:
         print(f"  {pol}-pol: R+T = {R_plus_T:.10f}, deviation = {dev:.2e} {status}")
 
 print("\n" + "=" * 80)
-
