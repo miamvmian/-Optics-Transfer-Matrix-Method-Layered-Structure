@@ -8,6 +8,14 @@ Tests energy conservation for constant permittivity (scalar values) for:
 - Both s and p polarizations
 """
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path so we can import TMatrix
+parent_dir = Path(__file__).parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
 import numpy as np
 from TMatrix import Layer, MultiLayerStructure
 from test_common_setup import tolerance, wavelengths, eps_air_const, eps_glass_const, eps_silica_const

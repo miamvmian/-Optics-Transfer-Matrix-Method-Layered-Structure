@@ -695,9 +695,9 @@ The implementation ensures energy conservation (R + T = 1.0) for lossless materi
 
 ### Test Coverage
 
-The codebase includes comprehensive test suites (`test_*.py`) that verify energy conservation. The tests are organized into focused modules:
+The codebase includes comprehensive test suites in the `tests/` directory that verify energy conservation. The tests are organized into focused modules:
 
-**Core Test Files:**
+**Core Test Files (in `tests/` directory):**
 - **test_common_setup.py**: Shared constants and material definitions for all tests
 - **test_constant_permittivity.py**: Constant permittivity (scalar values) tests
 - **test_wavelength_dependent_permittivity_basic.py**: Basic wavelength-dependent permittivity (arrays) tests
@@ -714,6 +714,16 @@ The codebase includes comprehensive test suites (`test_*.py`) that verify energy
 - **test_same_medium.py**: Same incident/exit medium comprehensive tests
 - **test_pattern_analysis.py**: Pattern analysis for different exit medium scenarios
 - **test_visualization.py**: Visualization plots (requires matplotlib)
+
+**Running Tests:**
+```bash
+# Run individual tests
+python3 tests/test_constant_permittivity.py
+python3 tests/test_wavelength_dependent_permittivity_basic.py
+
+# Run all tests
+python3 tests/test_*.py
+```
 
 **Test Coverage Summary:**
 - ✅ Constant permittivity (scalar values)
@@ -868,7 +878,7 @@ Contributions are welcome! Please ensure:
 - Code follows PEP 8 style guidelines
 - All functions have comprehensive docstrings
 - Type hints are included
-- Tests pass (run `test_*.py` files)
+- Tests pass (run `tests/test_*.py` files)
 
 ## Contact
 
