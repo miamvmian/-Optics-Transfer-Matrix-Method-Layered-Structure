@@ -799,8 +799,26 @@ class MultiLayerStructure:
             for i, layer in enumerate(self.layers)
         ]
 
+        # Precompute frequently reused quantities
+        self._sqrt_eps_incident = np.sqrt(self.eps_incident + 0j)
+        self._sqrt_eps_exit = np.sqrt(self.eps_exit + 0j)
+        self._layer_sqrt_eps = [
+            np.sqrt(layer_eps + 0j) for layer_eps in self._layer_permittivities
+        ]
+
         self.k0 = 2 * np.pi / self.wavelengths
-        self.kx = self.k0 * np.sqrt(self.eps_incident + 0j) * np.sin(self.angle_rad)
+        self.kx = self.k0 * self._sqrt_eps_incident * np.sin(self.angle_rad)
+
+        self._kz_incident = self._calculate_layer_kz(self.eps_incident)
+        self._kz_exit = self._calculate_layer_kz(self.eps_exit)
+        self._layer_kz = [
+            self._calculate_layer_kz(layer_eps) for layer_eps in self._layer_permittivities
+        ]
+
+        # Cached matrices/results (built on demand)
+        self._structure_matrices_cache: dict | None = None
+        self._total_transfer_matrix_cache: np.ndarray | None = None
+        self._single_interface_matrix_cache: np.ndarray | None = None
 
     def _normalize_permittivity(
         self, eps: complex | float | np.ndarray, layer_index: int | None = None
@@ -859,7 +877,50 @@ class MultiLayerStructure:
         # Add small imaginary part for numerical stability
         return np.sqrt(kz_squared + 1j * 1e-30)
 
-    def _create_interface_half_matrices(self, eps) -> tuple[np.ndarray, np.ndarray]:
+    def _build_structure_matrices_cache(self) -> None:
+        """Prepare and cache interface/propagation matrices for reuse."""
+        if self._structure_matrices_cache is not None or self.n_layers == 0:
+            return
+
+        F_in, F_0_inv = self._create_interface_half_matrices(
+            self.eps_incident, kz=self._kz_incident, sqrt_eps=self._sqrt_eps_incident
+        )
+        inner_interface_matrices = []
+        inner_interface_matrices_inv = [F_0_inv]
+
+        for idx in range(self.n_layers - 1):
+            F_i, F_i_inv = self._create_interface_half_matrices(
+                self._layer_permittivities[idx],
+                kz=self._layer_kz[idx],
+                sqrt_eps=self._layer_sqrt_eps[idx],
+            )
+            inner_interface_matrices.append(F_i)
+            inner_interface_matrices_inv.append(F_i_inv)
+
+        F_last, F_out_inv = self._create_interface_half_matrices(
+            self.eps_exit, kz=self._kz_exit, sqrt_eps=self._sqrt_eps_exit
+        )
+        inner_interface_matrices.append(F_last)
+
+        propagation_matrices = [
+            self._create_propagation_matrix(idx, kz=self._layer_kz[idx])
+            for idx in range(self.n_layers)
+        ]
+
+        self._structure_matrices_cache = {
+            "F_in": F_in,
+            "F_out_inv": F_out_inv,
+            "inner_interface_matrices": inner_interface_matrices,
+            "inner_interface_matrices_inv": inner_interface_matrices_inv,
+            "propagation_matrices": propagation_matrices,
+        }
+
+    def _create_interface_half_matrices(
+        self,
+        eps,
+        kz: np.ndarray | None = None,
+        sqrt_eps: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Create half transfer matrices for a single medium using cos(theta).
 
@@ -884,13 +945,16 @@ class MultiLayerStructure:
         The matrices are constructed using cos(theta) = kz / (k0 * sqrt(eps))
         for numerical stability and physical correctness.
         """
-        kz = self._calculate_layer_kz(eps)
+        if kz is None:
+            kz = self._calculate_layer_kz(eps)
+        if sqrt_eps is None:
+            sqrt_eps = np.sqrt(eps + 0j)
+
         N = self.n_wavelengths
         F_in = np.zeros((N, 2, 2), dtype=complex)
         F_out_inv = np.zeros((N, 2, 2), dtype=complex)
 
         # Calculate cos(theta) for the medium: cos(theta) = kz / (k0 * sqrt(eps))
-        sqrt_eps = np.sqrt(eps + 0j)
         cos_theta = kz / (self.k0 * sqrt_eps)
 
         if self.polarization == "s":
@@ -924,7 +988,9 @@ class MultiLayerStructure:
 
         return F_in, F_out_inv
 
-    def _create_propagation_matrix(self, layer_index: int) -> np.ndarray:
+    def _create_propagation_matrix(
+        self, layer_index: int, kz: np.ndarray | None = None
+    ) -> np.ndarray:
         """
         Create propagation matrix for a layer.
 
@@ -947,8 +1013,9 @@ class MultiLayerStructure:
             P[:, 0, 0] = exp(i*kz*d) for forward wave
             P[:, 1, 1] = exp(-i*kz*d) for backward wave
         """
-        eps = self._layer_permittivities[layer_index]
-        kz = self._calculate_layer_kz(eps)
+        if kz is None:
+            eps = self._layer_permittivities[layer_index]
+            kz = self._calculate_layer_kz(eps)
         N = self.n_wavelengths
         P = np.zeros((N, 2, 2), dtype=complex)
         # Forward wave: accumulates phase +kz*d
@@ -978,53 +1045,37 @@ class MultiLayerStructure:
             T[:, 1, 0] relates A_1^+ to A_N^-
             T[:, 1, 1] relates A_1^- to A_N^-
         """
+        if self._total_transfer_matrix_cache is not None:
+            return self._total_transfer_matrix_cache
+
         # Zero layers: single interface case
         if self.n_layers == 0:
-            tm = SingleInterfaceTMatrix(
-                lda=self.wavelengths,
-                theta=self.angle_degrees,
-                polarization=self.polarization,
-                eps_in=self.eps_incident,
-                eps_out=self.eps_exit,
-            )
-            return tm.full_transfer_matrix()
+            if self._single_interface_matrix_cache is None:
+                tm = SingleInterfaceTMatrix(
+                    lda=self.wavelengths,
+                    theta=self.angle_degrees,
+                    polarization=self.polarization,
+                    eps_in=self.eps_incident,
+                    eps_out=self.eps_exit,
+                )
+                self._single_interface_matrix_cache = tm.full_transfer_matrix()
+            self._total_transfer_matrix_cache = self._single_interface_matrix_cache
+            return self._total_transfer_matrix_cache
 
-        # One or more layers: construct matrices for each interface and layer
-        # F_in: forward matrix for incident medium
-        # F_0_inv: inverse matrix for first layer (used to cancel F_in at first interface)
-        F_in, F_0_inv = self._create_interface_half_matrices(self.eps_incident)
-        inner_interface_matrices = []  # Forward matrices for each layer
-        inner_interface_matrices_inv = [
-            F_0_inv
-        ]  # Inverse matrices (starts with F_0_inv)
+        # One or more layers: construct or reuse cached matrices
+        self._build_structure_matrices_cache()
+        cache = self._structure_matrices_cache
+        assert cache is not None
 
-        # Create interface matrices for transitions between layers
-        # For N layers, we need N-1 inter-layer interfaces
-        for i in range(self.n_layers - 1):
-            # Matrix for layer i (forward direction)
-            eps_layer = self._layer_permittivities[i]
-            F_i, F_i_inv = self._create_interface_half_matrices(eps_layer)
-            inner_interface_matrices.append(F_i)
-            inner_interface_matrices_inv.append(F_i_inv)
-
-        # F_last: forward matrix for exit medium (last layer to exit)
-        # F_out_inv: inverse matrix for exit medium
-        F_last, F_out_inv = self._create_interface_half_matrices(self.eps_exit)
-        inner_interface_matrices.append(F_last)
-
-        # Create propagation matrices for each layer
-        propagation_matrices = [
-            self._create_propagation_matrix(idx) for idx in range(self.n_layers)
-        ]
-
-        # Multiply all matrices in the correct order to get total transfer matrix
-        return multiply_transfer_matrices(
-            F_in,
-            F_out_inv,
-            inner_interface_matrices,
-            propagation_matrices,
-            inner_interface_matrices_inv,
+        tm = multiply_transfer_matrices(
+            cache["F_in"],
+            cache["F_out_inv"],
+            cache["inner_interface_matrices"],
+            cache["propagation_matrices"],
+            cache["inner_interface_matrices_inv"],
         )
+        self._total_transfer_matrix_cache = tm
+        return tm
 
     def wave_vectors(self) -> dict[str, np.ndarray]:
         """
@@ -1045,12 +1096,9 @@ class MultiLayerStructure:
             - 'kz_layers': List of normal components for each layer,
                           each element shape (n_wavelengths,)
         """
-        kz_incident = self._calculate_layer_kz(self.eps_incident)
-        kz_exit = self._calculate_layer_kz(self.eps_exit)
-        kz_layers = [
-            self._calculate_layer_kz(self._layer_permittivities[i])
-            for i in range(self.n_layers)
-        ]
+        kz_incident = self._kz_incident
+        kz_exit = self._kz_exit
+        kz_layers = list(self._layer_kz)
         return {
             "k0": self.k0,
             "kx": self.kx,
@@ -1105,15 +1153,13 @@ class MultiLayerStructure:
         )
 
         # Calculate kz components
-        kz_incident = self._calculate_layer_kz(self.eps_incident)
-        kz_exit = self._calculate_layer_kz(self.eps_exit)
+        kz_incident = self._kz_incident
+        kz_exit = self._kz_exit
 
         # sqrt(eps_n) * cos(theta_n) = kz_n / k_0
 
         # Handle zero layer case separately (single interface)
         if self.n_layers == 0:
-            sqrt_eps_incident = np.sqrt(self.eps_incident)
-            sqrt_eps_exit = np.sqrt(self.eps_exit)
             sqrt_eps_cos_theta_incident = kz_incident / self.k0
             sqrt_eps_cos_theta_exit = kz_exit / self.k0
 
@@ -1128,7 +1174,7 @@ class MultiLayerStructure:
                 )
             else:
                 # p-polarization: t_p = (sqrt(eps_1) / sqrt(eps_N)) * (T_11 - (T_21 / T_22) * T_12)
-                t_p = (sqrt_eps_incident / sqrt_eps_exit) * t_base
+                t_p = (self._sqrt_eps_incident / self._sqrt_eps_exit) * t_base
                 # T_p = Re((sqrt(eps_N) * cos(theta_N))*) / (sqrt(eps_1) * cos(theta_1)) * |t_p|²
                 T_val = (
                     np.real(np.conj(sqrt_eps_cos_theta_exit))
