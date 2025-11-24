@@ -33,6 +33,7 @@ A comprehensive Python implementation of the Transfer Matrix Method (TMM) for ca
 - Vectorized operations for efficient wavelength sweeps
 - Numerical stability using cos(θ) instead of kz/k0 ratios
 - Comprehensive input validation
+- **Cached interface/propagation matrices** so repeated reflectance/transmittance queries reuse prior work
 - **Energy conservation verified**: R + T = 1.0 for lossless materials across all test cases
 - **Comprehensive test suite**: 200+ test cases organized into focused test modules covering all scenarios
 
@@ -721,8 +722,16 @@ The codebase includes comprehensive test suites in the `tests/` directory that v
 python3 tests/test_constant_permittivity.py
 python3 tests/test_wavelength_dependent_permittivity_basic.py
 
-# Run all tests
-python3 tests/test_*.py
+# Run the full numerical suite (visualization test optional)
+for f in tests/test_*.py; do
+  if [ "$f" = "tests/test_visualization.py" ]; then
+    continue  # run plotting test manually when needed
+  fi
+  python3 "$f"
+done
+
+# test_visualization.py produces plots; ensure MPLCONFIGDIR points to a writable folder before running it:
+MPLCONFIGDIR=.mplconfig python3 tests/test_visualization.py
 ```
 
 **Test Coverage Summary:**
@@ -788,6 +797,8 @@ assert np.allclose(R_plus_T, 1.0, atol=1e-10)
    # Use in structure
    ml = MultiLayerStructure(wavelengths, angle, pol, layers, 1.0, eps_dispersive)
    ```
+
+4. **Reuse structure instances**: A `MultiLayerStructure` caches interface/propagation matrices and the full transfer matrix, so calling `reflectance()`, `transmittance()`, or `total_transfer_matrix()` multiple times on the same instance has minimal overhead once the first call completes.
 
 ### Benchmarks
 
