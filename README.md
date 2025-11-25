@@ -897,11 +897,16 @@ For questions, issues, or suggestions, please open an issue on GitHub.
 
 ---
 
-**Version**: 2.1  
+**Version**: 2.2  
 **Last Updated**: 2025  
 **Python Compatibility**: 3.7+
 
 ### Version History
+
+**v2.2** (2025)
+- Fixed the multi-layer interface caching so every layer contributes correctly to the total transfer matrix (restores non-zero reflectance for Bragg mirrors).
+- Applied the power-flow correction to transmittance for both single-interface and multi-layer cases, ensuring `R + T = 1` for all lossless stacks and angles.
+- Added a Bragg-mirror regression test (air | [Nb₂O₅ | SiO₂]₁₀ | SiO₂, 1–2 µm sweep) to guard against future energy-conservation regressions.
 
 **v2.1** (2025)
 - Added comprehensive support for wavelength-dependent permittivity (arrays)

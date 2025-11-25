@@ -26,6 +26,7 @@ eps_silica_const = 2.13
 eps_titanium_const = 5.76
 eps_silicon_const = 12.25  # n = 3.5
 eps_water_const = 1.77  # n ≈ 1.33
+eps_Nb2O5_const = 2.24**2
 
 # Wavelength-dependent permittivity arrays
 eps_air_array = np.ones(n_wavelengths)  # Air is constant
@@ -34,9 +35,9 @@ eps_silica_array = 2.13 + 0.005 * (wavelengths * 1e9 - 600) / 600
 eps_titanium_array = 5.76 + 0.02 * (wavelengths * 1e9 - 600) / 600
 eps_silicon_array = 12.25 + 0.05 * (wavelengths * 1e9 - 600) / 600
 eps_water_array = 1.77 + 0.002 * (wavelengths * 1e9 - 600) / 600
+eps_Nb2O5_array = eps_Nb2O5_const * np.ones(n_wavelengths)
 
 # Refractive indices
 n_glass_const = 1.5
 n_silica_const = 1.46
 n_glass_array = 1.5 + 0.01 * (wavelengths * 1e9 - 600) / 600
-

@@ -812,7 +812,8 @@ class MultiLayerStructure:
         self._kz_incident = self._calculate_layer_kz(self.eps_incident)
         self._kz_exit = self._calculate_layer_kz(self.eps_exit)
         self._layer_kz = [
-            self._calculate_layer_kz(layer_eps) for layer_eps in self._layer_permittivities
+            self._calculate_layer_kz(layer_eps)
+            for layer_eps in self._layer_permittivities
         ]
 
         # Cached matrices/results (built on demand)
@@ -882,25 +883,24 @@ class MultiLayerStructure:
         if self._structure_matrices_cache is not None or self.n_layers == 0:
             return
 
-        F_in, F_0_inv = self._create_interface_half_matrices(
+        F_in, _ = self._create_interface_half_matrices(
             self.eps_incident, kz=self._kz_incident, sqrt_eps=self._sqrt_eps_incident
         )
-        inner_interface_matrices = []
-        inner_interface_matrices_inv = [F_0_inv]
+        layer_forward_matrices = []
+        layer_inverse_matrices = []
 
-        for idx in range(self.n_layers - 1):
+        for idx in range(self.n_layers):
             F_i, F_i_inv = self._create_interface_half_matrices(
                 self._layer_permittivities[idx],
                 kz=self._layer_kz[idx],
                 sqrt_eps=self._layer_sqrt_eps[idx],
             )
-            inner_interface_matrices.append(F_i)
-            inner_interface_matrices_inv.append(F_i_inv)
+            layer_forward_matrices.append(F_i)
+            layer_inverse_matrices.append(F_i_inv)
 
-        F_last, F_out_inv = self._create_interface_half_matrices(
+        _, F_out_inv = self._create_interface_half_matrices(
             self.eps_exit, kz=self._kz_exit, sqrt_eps=self._sqrt_eps_exit
         )
-        inner_interface_matrices.append(F_last)
 
         propagation_matrices = [
             self._create_propagation_matrix(idx, kz=self._layer_kz[idx])
@@ -910,8 +910,8 @@ class MultiLayerStructure:
         self._structure_matrices_cache = {
             "F_in": F_in,
             "F_out_inv": F_out_inv,
-            "inner_interface_matrices": inner_interface_matrices,
-            "inner_interface_matrices_inv": inner_interface_matrices_inv,
+            "layer_forward_matrices": layer_forward_matrices,
+            "layer_inverse_matrices": layer_inverse_matrices,
             "propagation_matrices": propagation_matrices,
         }
 
@@ -1070,9 +1070,9 @@ class MultiLayerStructure:
         tm = multiply_transfer_matrices(
             cache["F_in"],
             cache["F_out_inv"],
-            cache["inner_interface_matrices"],
+            cache["layer_forward_matrices"],
             cache["propagation_matrices"],
-            cache["inner_interface_matrices_inv"],
+            cache["layer_inverse_matrices"],
         )
         self._total_transfer_matrix_cache = tm
         return tm
@@ -1158,39 +1158,19 @@ class MultiLayerStructure:
 
         # sqrt(eps_n) * cos(theta_n) = kz_n / k_0
 
-        # Handle zero layer case separately (single interface)
-        if self.n_layers == 0:
-            sqrt_eps_cos_theta_incident = kz_incident / self.k0
-            sqrt_eps_cos_theta_exit = kz_exit / self.k0
+        sqrt_eps_cos_theta_incident = kz_incident / self.k0
+        sqrt_eps_cos_theta_exit = kz_exit / self.k0
 
-            if self.polarization == "s":
-                # s-polarization: t_s = T_11 - (T_21 / T_22) * T_12
-                t_s = t_base
-                # T_s = Re((sqrt(eps_N) * cos(theta_N))*) / (sqrt(eps_1) * cos(theta_1)) * |t_s|²
-                T_val = (
-                    np.real(np.conj(sqrt_eps_cos_theta_exit))
-                    / sqrt_eps_cos_theta_incident
-                    * np.abs(t_s) ** 2
-                )
-            else:
-                # p-polarization: t_p = (sqrt(eps_1) / sqrt(eps_N)) * (T_11 - (T_21 / T_22) * T_12)
-                t_p = (self._sqrt_eps_incident / self._sqrt_eps_exit) * t_base
-                # T_p = Re((sqrt(eps_N) * cos(theta_N))*) / (sqrt(eps_1) * cos(theta_1)) * |t_p|²
-                T_val = (
-                    np.real(np.conj(sqrt_eps_cos_theta_exit))
-                    / sqrt_eps_cos_theta_incident
-                    * np.abs(t_p) ** 2
-                )
+        if self.polarization == "s":
+            t_pol = t_base
         else:
-            # Cases with layers (1+ layers): use simplified formula
-            if self.polarization == "s":
-                # s-polarization: t_s = T_11 - (T_21 / T_22) * T_12
-                t_s = t_base
-                T_val = np.abs(t_s) ** 2
-            else:
-                # p-polarization: t_p = T_11 - (T_21 / T_22) * T_12
-                t_p = t_base
-                T_val = np.abs(t_p) ** 2
+            t_pol = (self._sqrt_eps_incident / self._sqrt_eps_exit) * t_base
+
+        T_val = (
+            np.real(np.conj(sqrt_eps_cos_theta_exit))
+            / sqrt_eps_cos_theta_incident
+            * np.abs(t_pol) ** 2
+        )
 
         return np.real(T_val)
 
@@ -1210,9 +1190,9 @@ class MultiLayerStructure:
 def multiply_transfer_matrices(
     F_in: np.ndarray,
     F_out_inv: np.ndarray,
-    inner_interface_matrices: list[np.ndarray],
+    layer_forward_matrices: list[np.ndarray],
     propagation_matrices: list[np.ndarray],
-    inner_interface_matrices_inv: list[np.ndarray],
+    layer_inverse_matrices: list[np.ndarray],
 ) -> np.ndarray:
     """
     Multiply interface and propagation matrices to form total transfer matrix.
@@ -1256,13 +1236,13 @@ def multiply_transfer_matrices(
 
     # Special case: single layer (optimized path)
     if n_layers == 1:
-        F_0_inv = inner_interface_matrices_inv[0]
-        F_0 = inner_interface_matrices[0]
+        F_layer_inv = layer_inverse_matrices[0]
+        F_layer = layer_forward_matrices[0]
         P_0 = propagation_matrices[0]
         # Multiplication order: F_0_inv @ F_in, then P_0, then F_0, then F_out_inv
-        t_matrix = np.matmul(F_0_inv, F_in)
+        t_matrix = np.matmul(F_layer_inv, F_in)
         t_matrix = np.matmul(P_0, t_matrix)
-        t_matrix = np.matmul(F_0, t_matrix)
+        t_matrix = np.matmul(F_layer, t_matrix)
         return np.matmul(F_out_inv, t_matrix)
 
     # General case: multiple layers
@@ -1270,11 +1250,11 @@ def multiply_transfer_matrices(
     t_matrix = F_in.copy()
     # For each layer, apply: F_i_inv @ P_i @ F_i
     for i in range(n_layers):
-        # Apply inverse matrix (interface from previous medium to layer i)
-        t_matrix = np.matmul(inner_interface_matrices_inv[i], t_matrix)
+        # Apply inverse matrix (incident interface into layer i)
+        t_matrix = np.matmul(layer_inverse_matrices[i], t_matrix)
         # Apply propagation through layer i
         t_matrix = np.matmul(propagation_matrices[i], t_matrix)
         # Apply forward matrix (interface from layer i to next medium)
-        t_matrix = np.matmul(inner_interface_matrices[i], t_matrix)
+        t_matrix = np.matmul(layer_forward_matrices[i], t_matrix)
     # Final multiplication with exit medium inverse matrix
     return np.matmul(F_out_inv, t_matrix)
