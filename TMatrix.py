@@ -5,6 +5,8 @@ Computes 2x2 transfer matrices for single interfaces and multi-layer structures
 across multiple wavelengths. Supports both s-polarization (TE) and p-polarization (TM).
 """
 
+__version__ = "2.2.0"
+
 import warnings
 from dataclasses import dataclass
 
