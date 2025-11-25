@@ -818,7 +818,7 @@ Typical performance on modern hardware:
 ## Best Practices
 
 1. **Use appropriate units**: All lengths in meters, angles in degrees
-2. **Handle complex permittivities**: Use `eps = n_real**2 + 1j*n_imag` format
+2. **Handle complex permittivities**: Use `eps = eps_real**2 + 1j*eps_imag` format
 3. **Validate inputs**: The code includes comprehensive validation
 4. **Start simple**: Test with known cases (Fresnel equations, etc.)
 5. **Check energy conservation**: Verify R + T = 1.0 for lossless materials
