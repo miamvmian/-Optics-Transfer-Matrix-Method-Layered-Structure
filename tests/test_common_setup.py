@@ -1,4 +1,7 @@
 """
+Common setup and material definitions for energy conservation tests.
+"""
+
 import sys
 from pathlib import Path
 
@@ -6,8 +9,6 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
-Common setup and material definitions for energy conservation tests.
-"""
 
 import numpy as np
 
@@ -21,8 +22,8 @@ n_wavelengths = len(wavelengths)
 
 # Constant permittivities
 eps_air_const = 1.0
-eps_glass_const = 2.25
-eps_silica_const = 2.13
+eps_glass_const = 1.47**2
+eps_silica_const = 1.47**2
 eps_titanium_const = 5.76
 eps_silicon_const = 12.25  # n = 3.5
 eps_water_const = 1.77  # n ≈ 1.33
@@ -38,6 +39,35 @@ eps_water_array = 1.77 + 0.002 * (wavelengths * 1e9 - 600) / 600
 eps_Nb2O5_array = eps_Nb2O5_const * np.ones(n_wavelengths)
 
 # Refractive indices
-n_glass_const = 1.5
-n_silica_const = 1.46
-n_glass_array = 1.5 + 0.01 * (wavelengths * 1e9 - 600) / 600
+n_glass_const = 1.47
+n_silica_const = 1.47
+n_glass_array = 1.47 + 0.01 * (wavelengths * 1e9 - 600) / 600
+
+# Impedance of free space (Z_0 = sqrt(μ_0/ε_0) ≈ 376.73 Ω)
+Z_0_FREE_SPACE = 376.730313668  # Ohms
+
+
+# Function to calculate impedance from permittivity
+# For non-magnetic materials: Z = Z_0 / sqrt(eps)
+# where eps is the relative permittivity (ε_r)
+def calculate_impedance(eps):
+    """
+    Calculate impedance from permittivity.
+
+    Parameters:
+    -----------
+    eps : float or np.ndarray
+        Relative permittivity (ε_r)
+
+    Returns:
+    --------
+    float or np.ndarray
+        Impedance in Ohms: Z = Z_0 / sqrt(eps)
+    """
+    # Use real part of permittivity for impedance calculation
+    eps_real = np.real(eps) if isinstance(eps, np.ndarray) else np.real(eps)
+    return Z_0_FREE_SPACE / np.sqrt(eps_real + 0j)
+
+
+# Input electric field in Volts per meter
+E_in = 5.309e7  # 53.09 MV/m

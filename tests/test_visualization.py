@@ -228,8 +228,12 @@ ax.legend(fontsize=11)
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("energy_conservation_comprehensive.png", dpi=300, bbox_inches="tight")
-print("  ✓ Plots saved to: energy_conservation_comprehensive.png")
+# Save to plots folder
+plots_dir = Path(__file__).parent / "plots"
+plots_dir.mkdir(exist_ok=True)  # Create plots directory if it doesn't exist
+output_file = plots_dir / "energy_conservation_comprehensive.png"
+plt.savefig(output_file, dpi=300, bbox_inches="tight")
+print(f"  ✓ Plots saved to: {output_file}")
 # Don't show plots automatically (comment out plt.show() to avoid blocking)
 # plt.show()
 
