@@ -27,6 +27,8 @@ A comprehensive Python implementation of the Transfer Matrix Method (TMM) for ca
 - Handle complex permittivities (lossy materials)
 - Proper power flow correction for different incident/exit media
 - **Refractive index support**: Specify materials using either permittivity or refractive index
+- **Field visualization**: Calculate and visualize electric field distributions across multilayer structures
+- **Input field strength control**: Specify input electric field amplitude for absolute field calculations
 
 🚀 **Performance & Stability**
 
@@ -715,6 +717,9 @@ The codebase includes comprehensive test suites in the `tests/` directory that v
 - **test_same_medium.py**: Same incident/exit medium comprehensive tests
 - **test_pattern_analysis.py**: Pattern analysis for different exit medium scenarios
 - **test_visualization.py**: Visualization plots (requires matplotlib)
+- **test_field_visualization.py**: Field distribution visualization tests
+- **test_reflectance_Rs_Rp.py**: Reflectance calculation for S- and P-polarizations
+- **compare_tmatrix_comsol.py**: Comparison script for TMatrix vs COMSOL results
 
 **Running Tests:**
 ```bash
@@ -897,11 +902,18 @@ For questions, issues, or suggestions, please open an issue on GitHub.
 
 ---
 
-**Version**: 2.2  
+**Version**: 2.3  
 **Last Updated**: 2025  
 **Python Compatibility**: 3.7+
 
 ### Version History
+
+**v2.3** (2025)
+- Added field visualization capabilities via `TMatrix_Field.py` module
+- Added `E_in` parameter support for specifying input electric field strength
+- Changed field type "intensity" to "normE" (calculates |E| instead of |E|²)
+- Organized test outputs: `.txt` files → `tests/data/`, `.png` files → `tests/plots/`
+- Added impedance calculations and constants to `test_common_setup.py`
 
 **v2.2** (2025)
 - Fixed the multi-layer interface caching so every layer contributes correctly to the total transfer matrix (restores non-zero reflectance for Bragg mirrors).

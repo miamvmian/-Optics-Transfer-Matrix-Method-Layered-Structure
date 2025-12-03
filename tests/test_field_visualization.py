@@ -38,6 +38,7 @@ from test_common_setup import (
     eps_air_const,
     eps_silica_const,
     eps_Nb2O5_const,
+    E_in,
 )
 
 # Ensure plots directory exists
@@ -90,22 +91,24 @@ print(f"Transmittance: T = {T_s:.6f}")
 print(f"R + T = {R_s + T_s:.6f}")
 
 # Calculate layer field data
-layer_fields = calculate_layer_field_data(structure_simple)
+layer_fields = calculate_layer_field_data(structure_simple, E_in=E_in)
 print(f"\nNumber of layers: {len(layer_fields)}")
 for i, lf in enumerate(layer_fields):
     print(f"  Layer {i}: z = [{lf.z_start*1e9:.1f}, {lf.z_end*1e9:.1f}] nm")
 
 # Visualize
-print("\nGenerating visualization plots...")
+print(f"\nUsing input electric field: E_in = {E_in:.6e} V/m")
+print("Generating visualization plots...")
 visualize_field_mesh(
     structure_simple,
     x_range=(-500e-9, 500e-9),
     n_x=100,
     n_z_per_layer=50,
     wavelength_index=0,
-    field_type="intensity",
+    field_type="normE",
     save_path=str((Path(__file__).parent / "plots" / "field_single_layer.png")),
     show_plot=False,
+    E_in=E_in,
 )
 
 # Test 2: Multi-layer structure (Bragg mirror)
@@ -165,13 +168,14 @@ for wl_idx, wl in enumerate(wavelengths_bragg):
         n_x=100,
         n_z_per_layer=30,
         wavelength_index=wl_idx,
-        field_type="intensity",
+        field_type="normE",
         save_path=str(
             Path(__file__).parent
             / "plots"
             / f"field_bragg_combined_wl_{wl_idx}_{int(wl*1e9)}nm.png"
         ),
         show_plot=False,
+        E_in=E_in,
     )
 
 # Visualize layers separately for first wavelength
@@ -182,9 +186,10 @@ visualize_field_layers_separate(
     n_x=100,
     n_z_per_layer=30,
     wavelength_index=0,
-    field_type="intensity",
+    field_type="normE",
     save_path=str(Path(__file__).parent / "plots" / "field_bragg_layers.png"),
     show_plot=False,
+    E_in=E_in,
 )
 
 # Test 3: Test different field types
@@ -194,7 +199,7 @@ print("-" * 80)
 
 structure_test = structure_simple  # Use simple structure
 
-for field_type in ["intensity", "total", "forward", "backward"]:
+for field_type in ["normE", "total", "forward", "backward"]:
     print(f"\nTesting field type: {field_type}")
 
     # Create mesh grid
@@ -204,6 +209,7 @@ for field_type in ["intensity", "total", "forward", "backward"]:
         n_x=50,
         n_z_per_layer=30,
         wavelength_index=0,
+        E_in=E_in,
     )
 
     # Calculate field
@@ -246,9 +252,10 @@ visualize_field_mesh(
     n_x=100,
     n_z_per_layer=50,
     wavelength_index=0,
-    field_type="intensity",
+    field_type="normE",
     save_path=str(Path(__file__).parent / "plots" / "field_p_polarization.png"),
     show_plot=False,
+    E_in=E_in,
 )
 
 # Test 5: Multiple wavelengths
@@ -281,13 +288,14 @@ for wl_idx, wl in enumerate(wavelengths_multi):
         n_x=100,
         n_z_per_layer=50,
         wavelength_index=wl_idx,
-        field_type="intensity",
+        field_type="normE",
         save_path=str(
             Path(__file__).parent
             / "plots"
             / f"field_multi_wl_{wl_idx}_{int(wl*1e9)}nm.png"
         ),
         show_plot=False,
+        E_in=E_in,
     )
 
 print("\n" + "=" * 80)
